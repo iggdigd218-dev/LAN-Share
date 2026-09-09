@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#0B1220">
+
+    <LinearLayout
+        android:id="@+id/panel_connect"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="32dp"
+            android:gravity="center"
+            android:text="LAN Share"
+            android:textColor="#FFFFFF"
+            android:textSize="28sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:paddingTop="8dp"
+            android:text="الاتصال بالكمبيوتر عبر LAN"
+            android:textColor="#8EA0C4" />
+
+        <Button
+            android:id="@+id/btn_scan"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="بحث تلقائي في الشبكة" />
+
+        <LinearLayout
+            android:id="@+id/server_list"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+
+        <EditText
+            android:id="@+id/host"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:hint="http://192.168.1.10:8080"
+            android:inputType="textUri"
+            android:textColor="#FFFFFF"
+            android:textColorHint="#8EA0C4" />
+
+        <EditText
+            android:id="@+id/pin"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:hint="رمز PIN"
+            android:inputType="numberPassword"
+            android:textColor="#FFFFFF"
+            android:textColorHint="#8EA0C4" />
+
+        <Button
+            android:id="@+id/btn_connect"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="اتصال" />
+
+        <TextView
+            android:id="@+id/status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:gravity="center"
+            android:text="ابحث عن الكمبيوتر على شبكة المحل"
+            android:textColor="#8EA0C4" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/panel_browse"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:padding="8dp">
+
+            <Button
+                android:id="@+id/btn_back"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="رجوع" />
+
+            <TextView
+                android:id="@+id/path"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:ellipsize="start"
+                android:padding="8dp"
+                android:singleLine="true"
+                android:textColor="#FFFFFF" />
+
+            <Button
+                android:id="@+id/btn_out"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="خروج" />
+        </LinearLayout>
+
+        <ListView
+            android:id="@+id/files"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:divider="#1E2A44"
+            android:dividerHeight="1dp" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/panel_player"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:background="#0E1628"
+        android:orientation="vertical"
+        android:padding="12dp"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+            <TextView
+                android:id="@+id/player_title"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textColor="#FFFFFF"
+                android:textStyle="bold" />
+
+            <Button
+                android:id="@+id/btn_close_player"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="إغلاق" />
+        </LinearLayout>
+
+        <VideoView
+            android:id="@+id/video"
+            android:layout_width="match_parent"
+            android:layout_height="220dp" />
+    </LinearLayout>
+</FrameLayout>
