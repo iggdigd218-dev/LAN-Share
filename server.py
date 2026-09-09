@@ -10,6 +10,7 @@ import os
 import secrets
 import socket
 import string
+import sys
 import threading
 from pathlib import Path
 from urllib.parse import unquote
@@ -21,7 +22,13 @@ from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-ROOT = Path(__file__).resolve().parent
+if getattr(sys, "frozen", False):
+    ROOT = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
+    DATA_DIR = Path.home() / "LAN-Share"
+else:
+    ROOT = Path(__file__).resolve().parent
+    DATA_DIR = ROOT
+DATA_DIR.mkdir(parents=True, exist_ok=True)
 STATIC = ROOT / "static"
 HOME = Path.home()
 HTTP_PORT = 8080
@@ -29,7 +36,7 @@ DISCOVER_PORT = 45454
 
 PIN = "".join(secrets.choice(string.digits) for _ in range(6))
 TOKEN = secrets.token_urlsafe(24)
-(ROOT / ".pin").write_text(PIN, encoding="utf-8")
+(DATA_DIR / ".pin").write_text(PIN, encoding="utf-8")
 
 ALLOWED_ROOTS: list[Path] = []
 

@@ -1,0 +1,51 @@
+name: Build Windows EXE
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows-exe:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller fastapi uvicorn python-multipart "qrcode[pil]" aiofiles pillow
+      - name: Build EXE
+        run: |
+          pyinstaller --noconfirm --onefile --windowed --name LAN-Share `
+            --paths . `
+            --add-data "static;static" `
+            --hidden-import server `
+            --hidden-import uvicorn `
+            --hidden-import uvicorn.logging `
+            --hidden-import uvicorn.protocols.http.auto `
+            --hidden-import uvicorn.protocols.http.h11_impl `
+            --hidden-import uvicorn.lifespan.on `
+            --hidden-import fastapi `
+            --hidden-import starlette `
+            --hidden-import pydantic `
+            --collect-all uvicorn `
+            --collect-all fastapi `
+            --collect-all starlette `
+            windows/app.py
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LAN-Share-Windows
+          path: dist/LAN-Share.exe
+      - name: Attach EXE to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create windows-exe --title "LAN Share Windows EXE" --notes "تطبيق ويندوز LAN-Share.exe" --latest=false || true
+          gh release upload windows-exe dist/LAN-Share.exe --clobber
