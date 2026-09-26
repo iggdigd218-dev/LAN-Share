@@ -238,7 +238,7 @@ fun download(ctx: Context, url: String, name: String) {
 }
 
 @Composable
-fun ConnectScreen(onConnect: (String, String) -> Unit) {
+fun ConnectScreen(onConnect: (String, String, (String) -> Unit) -> Unit) {
     var host by remember { mutableStateOf("") }
     var pin by remember { mutableStateOf("") }
     var status by remember { mutableStateOf("ابحث عن الكمبيوتر على شبكة المحل") }
