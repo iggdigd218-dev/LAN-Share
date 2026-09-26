@@ -192,7 +192,32 @@ $("#player-close").addEventListener("click", () => {
   $("#player").hidden = true;
 });
 
-if (token) {
+// فحص المعلمات في الرابط للدخول التلقائي في حال مسح كود QR بكاميرا الهاتف
+const urlParams = new URLSearchParams(window.location.search);
+const pinFromUrl = urlParams.get("pin");
+
+if (pinFromUrl && !token) {
+  fetch("/api/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pin: pinFromUrl }),
+  })
+    .then((r) => {
+      if (!r.ok) throw new Error("فشل الدخول التلقائي");
+      return r.json();
+    })
+    .then((data) => {
+      token = data.token;
+      sessionStorage.setItem("lan_token", token);
+      currentPath = data.home;
+      showMain();
+      load(currentPath);
+    })
+    .catch(() => {
+      showLogin();
+      $("#pin").value = pinFromUrl;
+    });
+} else if (token) {
   showMain();
   load("");
 } else {

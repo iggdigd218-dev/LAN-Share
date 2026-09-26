@@ -84,15 +84,46 @@ if STATIC.exists():
     app.mount("/assets", StaticFiles(directory=str(STATIC)), name="assets")
 
 
-def local_ip() -> str:
+def get_local_ips() -> list[str]:
+    ips: list[str] = []
+    # 1. Primary routed IP via common gateways
+    for target in ("8.8.8.8", "1.1.1.1", "192.168.1.1", "10.0.0.1"):
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect((target, 80))
+            ip = s.getsockname()[0]
+            s.close()
+            if ip and not ip.startswith("127.") and ip not in ips:
+                ips.append(ip)
+                break
+        except Exception:
+            pass
+
+    # 2. Enumerate host interfaces (works completely offline)
     try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-        s.close()
-        return ip
+        hostname = socket.gethostname()
+        for info in socket.getaddrinfo(hostname, None, socket.AF_INET):
+            ip = info[4][0]
+            if ip and not ip.startswith("127.") and not ip.startswith("169.254.") and ip not in ips:
+                ips.append(ip)
     except Exception:
-        return "127.0.0.1"
+        pass
+
+    def ip_priority(ip: str) -> int:
+        if ip.startswith("192.168."):
+            return 0
+        if ip.startswith("10."):
+            return 1
+        if ip.startswith("172."):
+            return 2
+        return 3
+
+    ips.sort(key=ip_priority)
+    return ips if ips else ["127.0.0.1"]
+
+
+def local_ip() -> str:
+    return get_local_ips()[0]
 
 
 def is_allowed(path: Path) -> bool:
@@ -159,6 +190,7 @@ def hello():
     return {
         "name": "LAN Share",
         "ip": local_ip(),
+        "all_ips": get_local_ips(),
         "port": HTTP_PORT,
         "home": str(HOME),
         "computer": socket.gethostname(),
@@ -206,7 +238,7 @@ def share(body: ShareBody, authorization: str | None = Header(default=None)):
 
 @app.get("/api/qr")
 def qr_png():
-    url = f"http://{local_ip()}:{HTTP_PORT}"
+    url = f"http://{local_ip()}:{HTTP_PORT}/?pin={PIN}"
     img = qrcode.make(url)
     buf = io.BytesIO()
     img.save(buf, format="PNG")

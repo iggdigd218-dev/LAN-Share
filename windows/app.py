@@ -35,15 +35,42 @@ def local_ip() -> str:
     return lanserver.local_ip()
 
 
+def ensure_firewall() -> None:
+    if sys.platform == "win32":
+        try:
+            import subprocess
+
+            subprocess.run(
+                [
+                    "netsh",
+                    "advfirewall",
+                    "firewall",
+                    "add",
+                    "rule",
+                    "name=LAN Share",
+                    "dir=in",
+                    "action=allow",
+                    "protocol=TCP",
+                    f"localport={lanserver.HTTP_PORT}",
+                ],
+                capture_output=True,
+                creationflags=0x08000000 if hasattr(subprocess, "CREATE_NO_WINDOW") else 0,
+            )
+        except Exception:
+            pass
+
+
 class WinApp(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
         self.title("LAN Share — الكمبيوتر")
-        self.geometry("520x640")
+        self.geometry("540x700")
         self.configure(bg="#0b1220")
         self.resizable(False, False)
         self._photo = None
         self._server_thread = None
+        self._current_ip = local_ip()
+        ensure_firewall()
         self._build()
         self.after(400, self.start_server)
 
@@ -80,7 +107,15 @@ class WinApp(tk.Tk):
         row("رمز PIN", self.var_pin, big=True)
 
         self.qr_label = tk.Label(self, bg="#0b1220")
-        self.qr_label.pack(pady=8)
+        self.qr_label.pack(pady=4)
+
+        tk.Label(
+            self,
+            text="📷 امسح الكود بكاميرا الهاتف أو من داخل تطبيق LAN Share للاتصال المباشر",
+            fg="#5b8cff",
+            bg="#0b1220",
+            font=("Segoe UI", 9, "bold"),
+        ).pack(pady=(0, 6))
 
         btns = tk.Frame(self, bg="#0b1220")
         btns.pack(fill="x", padx=24, pady=8)
@@ -159,8 +194,12 @@ class WinApp(tk.Tk):
         self._server_thread = threading.Thread(target=run, daemon=True)
         self._server_thread.start()
         ip = local_ip()
+        self._current_ip = ip
         self.var_ip.set(f"http://{ip}:{lanserver.HTTP_PORT}")
-        self.var_status.set("يعمل — جاهز لاتصال الهاتف")
+        if ip.startswith("127."):
+            self.var_status.set("تحذير: الكمبيوتر غير متصل بشبكة Wi-Fi أو LAN!")
+        else:
+            self.var_status.set("يعمل — جاهز لاتصال الهاتف")
         self.show_qr()
 
     def show_qr(self) -> None:
@@ -168,7 +207,8 @@ class WinApp(tk.Tk):
             return
         import qrcode
 
-        url = f"http://{local_ip()}:{lanserver.HTTP_PORT}"
+        # يتضمن الرابط رمز PIN ليتم الدخول مباشرة فور المسح بالكاميرا أو التطبيق
+        url = f"http://{self._current_ip}:{lanserver.HTTP_PORT}/?pin={lanserver.PIN}"
         img = qrcode.make(url)
         buf = io.BytesIO()
         img.save(buf, format="PNG")
