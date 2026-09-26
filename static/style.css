@@ -93,3 +93,19 @@ button, .dl {
 .player .icon-btn { position: absolute; top: 8px; left: 8px; width: 36px; height: 36px; }
 .player .dl { margin-top: 8px; text-align: center; text-decoration: none; }
 [hidden] { display: none !important; }
+
+.row-dl {
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  text-decoration: none;
+  font-size: 16px;
+  margin-right: 6px;
+  transition: background 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.row-dl:hover {
+  background: rgba(91, 140, 255, 0.35);
+}

@@ -124,6 +124,7 @@ function renderList(items, searching) {
         <div class="n">${escapeHtml(it.name)}</div>
         <div class="s">${it.is_dir ? "مجلد" : it.size_h}${searching ? " — " + escapeHtml(it.path) : ""}</div>
       </div>
+      ${!it.is_dir ? `<a class="row-dl" href="${dlUrl(it.path)}" download="${escapeHtml(it.name)}" title="تنزيل إلى هاتفك" onclick="event.stopPropagation()">⬇️</a>` : ""}
     `;
     row.addEventListener("click", () => openItem(it));
     list.appendChild(row);

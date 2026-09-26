@@ -13,7 +13,7 @@ import string
 import sys
 import threading
 from pathlib import Path
-from urllib.parse import unquote
+from urllib.parse import quote, unquote
 
 import qrcode
 from fastapi import FastAPI, File, Header, HTTPException, Query, UploadFile
@@ -333,6 +333,25 @@ def search(
     return {"items": found}
 
 
+@app.get("/LAN-Share.apk")
+@app.get("/download-app")
+def download_app():
+    for p in [
+        ROOT / "LAN-Share.apk",
+        ROOT / "android" / "LAN-Share.apk",
+        ROOT / "android" / "app" / "build" / "outputs" / "apk" / "release" / "LAN-Share.apk",
+        Path.home() / "LAN-Share" / "LAN-Share.apk",
+    ]:
+        if p.exists() and p.is_file():
+            return FileResponse(
+                str(p),
+                filename="LAN-Share.apk",
+                media_type="application/vnd.android.package-archive",
+            )
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse("https://github.com/iggdigd218-dev/LAN-Share/releases/download/v1.0.0/LAN-Share.apk")
+
+
 @app.get("/api/download")
 def download(
     path: str,
@@ -344,9 +363,15 @@ def download(
     target = Path(unquote(path)).resolve()
     if not is_allowed(target) or not target.is_file():
         raise HTTPException(404, "الملف غير موجود")
+
+    encoded_name = quote(target.name)
+    headers = {
+        "Content-Disposition": f"attachment; filename=\"{encoded_name}\"; filename*=utf-8''{encoded_name}",
+        "Access-Control-Expose-Headers": "Content-Disposition",
+    }
     return FileResponse(
         str(target),
-        filename=target.name,
+        headers=headers,
         media_type=mimetypes.guess_type(str(target))[0] or "application/octet-stream",
     )
 

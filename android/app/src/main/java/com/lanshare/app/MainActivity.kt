@@ -1,10 +1,14 @@
 package com.lanshare.app
 
-import android.app.DownloadManager
+import android.content.ContentValues
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.provider.MediaStore
+import android.widget.Toast
 import android.widget.VideoView
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -41,6 +45,9 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import java.io.File
+import java.io.FileOutputStream
+import java.io.InputStream
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.HttpURLConnection
@@ -49,6 +56,7 @@ import java.net.InetAddress
 import java.net.NetworkInterface
 import java.net.URL
 import java.net.URLEncoder
+import java.util.Locale
 import java.util.concurrent.CopyOnWriteArrayList
 
 data class FileItem(
@@ -60,6 +68,122 @@ data class FileItem(
 )
 
 data class ServerHit(val name: String, val ip: String, val port: Int)
+
+data class DownloadState(
+    val filename: String,
+    val progress: Float,
+    val downloadedBytes: Long,
+    val totalBytes: Long,
+    val isDone: Boolean = false,
+    val uri: Uri? = null,
+    val mimeType: String = "application/octet-stream",
+    val error: String? = null
+)
+
+fun formatSize(bytes: Long): String {
+    if (bytes <= 0) return "0 B"
+    val units = arrayOf("B", "KB", "MB", "GB", "TB")
+    val digitGroups = (Math.log10(bytes.toDouble()) / Math.log10(1024.0)).toInt()
+    val group = digitGroups.coerceIn(0, units.size - 1)
+    return String.format(Locale.US, "%.1f %s", bytes / Math.pow(1024.0, group.toDouble()), units[group])
+}
+
+fun getMimeType(filename: String): String {
+    val ext = filename.substringAfterLast('.', "").lowercase()
+    return when (ext) {
+        "mp4", "mkv", "avi", "mov", "webm" -> "video/*"
+        "mp3", "wav", "m4a", "ogg", "flac", "aac" -> "audio/*"
+        "jpg", "jpeg", "png", "webp", "gif", "bmp" -> "image/*"
+        "pdf" -> "application/pdf"
+        "apk" -> "application/vnd.android.package-archive"
+        "zip", "rar", "7z", "tar", "gz" -> "application/zip"
+        "txt" -> "text/plain"
+        "doc", "docx" -> "application/msword"
+        "xls", "xlsx" -> "application/vnd.ms-excel"
+        else -> "application/octet-stream"
+    }
+}
+
+fun openFile(ctx: Context, uri: Uri, mimeType: String) {
+    try {
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, mimeType)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        ctx.startActivity(intent)
+    } catch (_: Exception) {
+        Toast.makeText(ctx, "تم حفظ الملف ولكن لا يوجد تطبيق لتشغيله مباشرة", Toast.LENGTH_LONG).show()
+    }
+}
+
+fun saveToDownloads(
+    ctx: Context,
+    filename: String,
+    inputStream: InputStream,
+    totalBytes: Long,
+    onProgress: (Float, Long) -> Unit
+): Uri {
+    val mime = getMimeType(filename)
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        val values = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, filename)
+            put(MediaStore.MediaColumns.MIME_TYPE, mime)
+            put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+            put(MediaStore.MediaColumns.IS_PENDING, 1)
+        }
+        val resolver = ctx.contentResolver
+        val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+            ?: throw RuntimeException("تعذر إنشاء الملف في مجلد التنزيلات")
+        try {
+            resolver.openOutputStream(uri)?.use { out ->
+                val buf = ByteArray(64 * 1024)
+                var read: Int
+                var totalRead = 0L
+                while (inputStream.read(buf).also { read = it } != -1) {
+                    out.write(buf, 0, read)
+                    totalRead += read
+                    val pct = if (totalBytes > 0) totalRead.toFloat() / totalBytes else -1f
+                    onProgress(pct, totalRead)
+                }
+                out.flush()
+            }
+            values.clear()
+            values.put(MediaStore.MediaColumns.IS_PENDING, 0)
+            resolver.update(uri, values, null, null)
+            return uri
+        } catch (e: Exception) {
+            try { resolver.delete(uri, null, null) } catch (_: Exception) {}
+            throw e
+        }
+    } else {
+        val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        if (!dir.exists()) dir.mkdirs()
+        var file = File(dir, filename)
+        if (file.exists()) {
+            val namePart = filename.substringBeforeLast('.')
+            val extPart = if (filename.contains('.')) "." + filename.substringAfterLast('.') else ""
+            var count = 1
+            while (file.exists()) {
+                file = File(dir, "$namePart ($count)$extPart")
+                count++
+            }
+        }
+        FileOutputStream(file).use { out ->
+            val buf = ByteArray(64 * 1024)
+            var read: Int
+            var totalRead = 0L
+            while (inputStream.read(buf).also { read = it } != -1) {
+                out.write(buf, 0, read)
+                totalRead += read
+                val pct = if (totalBytes > 0) totalRead.toFloat() / totalBytes else -1f
+                onProgress(pct, totalRead)
+            }
+            out.flush()
+        }
+        return Uri.fromFile(file)
+    }
+}
 
 fun normalizeHost(raw: String): String {
     var h = raw.trim().trimEnd('/')
@@ -85,7 +209,6 @@ fun parseQr(content: String): Pair<String, String> {
     var pin = ""
     var host = ""
 
-    // 1. JSON format: {"host":"...","pin":"..."}
     if (raw.startsWith("{") && raw.endsWith("}")) {
         try {
             val obj = JSONObject(raw)
@@ -95,13 +218,11 @@ fun parseQr(content: String): Pair<String, String> {
         } catch (_: Exception) {}
     }
 
-    // 2. Custom URI scheme: lanshare://...
     var cleaned = raw
     if (cleaned.startsWith("lanshare://", ignoreCase = true)) {
         cleaned = "http://" + cleaned.substring("lanshare://".length)
     }
 
-    // 3. HTTP / HTTPS URL: http://ip:8080/?pin=...
     try {
         val uri = Uri.parse(if (cleaned.startsWith("http://") || cleaned.startsWith("https://")) cleaned else "http://$cleaned")
         val pinParam = uri.getQueryParameter("pin")
@@ -319,8 +440,62 @@ fun App() {
     var path by remember { mutableStateOf("") }
     var items by remember { mutableStateOf(listOf<FileItem>()) }
     var playing by remember { mutableStateOf<FileItem?>(null) }
+    var downloadState by remember { mutableStateOf<DownloadState?>(null) }
+
     val scope = rememberCoroutineScope()
     val ctx = LocalContext.current
+
+    val startDownload: (FileItem) -> Unit = { item ->
+        scope.launch {
+            downloadState = DownloadState(
+                filename = item.name,
+                progress = -1f,
+                downloadedBytes = 0L,
+                totalBytes = 0L,
+                mimeType = getMimeType(item.name)
+            )
+            try {
+                val uri = withContext(Dispatchers.IO) {
+                    val dlUrl = api.downloadUrl(item.path)
+                    val conn = URL(dlUrl).openConnection() as HttpURLConnection
+                    conn.connectTimeout = 12000
+                    conn.readTimeout = 60000
+                    conn.requestMethod = "GET"
+                    val code = conn.responseCode
+                    if (code !in 200..299) {
+                        throw RuntimeException("استجاب الخادم برمز خطأ: $code")
+                    }
+                    val length = conn.contentLengthLong
+                    saveToDownloads(ctx, item.name, conn.inputStream, length) { pct, readBytes ->
+                        downloadState = DownloadState(
+                            filename = item.name,
+                            progress = pct,
+                            downloadedBytes = readBytes,
+                            totalBytes = length,
+                            mimeType = getMimeType(item.name)
+                        )
+                    }
+                }
+                downloadState = DownloadState(
+                    filename = item.name,
+                    progress = 1f,
+                    downloadedBytes = downloadState?.downloadedBytes ?: 0L,
+                    totalBytes = downloadState?.totalBytes ?: 0L,
+                    isDone = true,
+                    uri = uri,
+                    mimeType = getMimeType(item.name)
+                )
+            } catch (e: Exception) {
+                downloadState = DownloadState(
+                    filename = item.name,
+                    progress = 0f,
+                    downloadedBytes = 0L,
+                    totalBytes = 0L,
+                    error = e.localizedMessage ?: "فشل تنزيل الملف"
+                )
+            }
+        }
+    }
 
     when (screen) {
         "connect" -> ConnectScreen { targetHost, targetPin, setStatus ->
@@ -362,31 +537,117 @@ fun App() {
                 } else if (it.kind == "audio" || it.kind == "video") {
                     playing = it
                 } else {
-                    download(ctx, api.downloadUrl(it.path), it.name)
+                    startDownload(it)
                 }
             },
-            onDownload = { it -> download(ctx, api.downloadUrl(it.path), it.name) },
+            onDownload = { it -> startDownload(it) },
             onDisconnect = { screen = "connect" }
         )
     }
 
     playing?.let { f ->
-        PlayerSheet(url = api.streamUrl(f.path), title = f.name, isVideo = f.kind == "video") {
-            playing = null
-        }
+        PlayerSheet(
+            url = api.streamUrl(f.path),
+            title = f.name,
+            isVideo = f.kind == "video",
+            onDownload = { startDownload(f) },
+            onClose = { playing = null }
+        )
+    }
+
+    downloadState?.let { state ->
+        DownloadDialog(
+            state = state,
+            onOpen = {
+                state.uri?.let { uri -> openFile(ctx, uri, state.mimeType) }
+            },
+            onDismiss = { downloadState = null }
+        )
     }
 }
 
-fun download(ctx: Context, url: String, name: String) {
-    val req = DownloadManager.Request(Uri.parse(url))
-        .setTitle(name)
-        .setDescription("نسخ من الكمبيوتر")
-        .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-        .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, name)
-        .setAllowedOverMetered(true)
-        .setAllowedOverRoaming(true)
-    val dm = ctx.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-    dm.enqueue(req)
+@Composable
+fun DownloadDialog(state: DownloadState, onOpen: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = { if (state.isDone || state.error != null) onDismiss() },
+        title = {
+            Text(
+                if (state.isDone) "تم التنزيل بنجاح ✅"
+                else if (state.error != null) "تعذر التنزيل ❌"
+                else "جاري التنزيل من الكمبيوتر… ⏳",
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                fontSize = 17.sp
+            )
+        },
+        text = {
+            Column(Modifier.fillMaxWidth().padding(top = 4.dp)) {
+                Text(state.filename, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, maxLines = 2)
+                Spacer(Modifier.height(14.dp))
+
+                if (state.error != null) {
+                    Text(state.error, color = Color(0xFFFF6B6B), fontSize = 13.sp)
+                } else if (state.isDone) {
+                    Text(
+                        "تم حفظ الملف في مجلد التنزيلات (Downloads) بالهاتف.",
+                        color = Color(0xFF4ADE80),
+                        fontSize = 13.sp
+                    )
+                    Text(
+                        "الحجم: ${formatSize(state.downloadedBytes)}",
+                        color = Color(0xFF8EA0C4),
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(top = 6.dp)
+                    )
+                } else {
+                    if (state.progress >= 0f) {
+                        LinearProgressIndicator(
+                            progress = { state.progress },
+                            modifier = Modifier.fillMaxWidth().height(8.dp),
+                            color = Color(0xFF5B8CFF),
+                            trackColor = Color(0xFF1E2A44)
+                        )
+                    } else {
+                        LinearProgressIndicator(
+                            modifier = Modifier.fillMaxWidth().height(8.dp),
+                            color = Color(0xFF5B8CFF),
+                            trackColor = Color(0xFF1E2A44)
+                        )
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text(
+                            if (state.totalBytes > 0) "${(state.progress * 100).toInt()}%" else "جاري التحميل…",
+                            color = Color.White,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            "${formatSize(state.downloadedBytes)} / ${if (state.totalBytes > 0) formatSize(state.totalBytes) else "..."}",
+                            color = Color(0xFF8EA0C4),
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            if (state.isDone && state.uri != null) {
+                Button(
+                    onClick = onOpen,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF22C55E))
+                ) {
+                    Text("فتح الملف")
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(if (state.isDone) "تم" else if (state.error != null) "إغلاق" else "إلغاء")
+            }
+        },
+        containerColor = Color(0xFF121A2B)
+    )
 }
 
 @Composable
@@ -431,7 +692,6 @@ fun ConnectScreen(onConnect: (String, String, (String) -> Unit) -> Unit) {
             modifier = Modifier.padding(top = 4.dp, bottom = 20.dp)
         )
 
-        // Primary action: QR Code Scanner Button
         Button(
             onClick = {
                 val options = ScanOptions().apply {
@@ -458,7 +718,6 @@ fun ConnectScreen(onConnect: (String, String, (String) -> Unit) -> Unit) {
             modifier = Modifier.padding(top = 6.dp, bottom = 16.dp)
         )
 
-        // Secondary action: Automatic LAN discovery
         OutlinedButton(
             onClick = {
                 isSearching = true
@@ -654,7 +913,14 @@ fun BrowseScreen(
                         Text(if (it.isDir) "مجلد" else it.sizeH, color = Color(0xFF8EA0C4), fontSize = 12.sp)
                     }
                     if (!it.isDir) {
-                        TextButton(onClick = { onDownload(it) }) { Text("نسخ") }
+                        FilledTonalButton(
+                            onClick = { onDownload(it) },
+                            colors = ButtonDefaults.filledTonalButtonColors(containerColor = Color(0xFF1E2A44)),
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Text("تنزيل 📥", color = Color(0xFF5B8CFF), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }
@@ -663,7 +929,13 @@ fun BrowseScreen(
 }
 
 @Composable
-fun PlayerSheet(url: String, title: String, isVideo: Boolean, onClose: () -> Unit) {
+fun PlayerSheet(
+    url: String,
+    title: String,
+    isVideo: Boolean,
+    onDownload: () -> Unit,
+    onClose: () -> Unit
+) {
     Box(
         Modifier.fillMaxSize().background(Color(0xE60B1220)).clickable(enabled = false) {}
     ) {
@@ -675,6 +947,7 @@ fun PlayerSheet(url: String, title: String, isVideo: Boolean, onClose: () -> Uni
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(title, color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                TextButton(onClick = onDownload) { Text("تنزيل 📥") }
                 TextButton(onClick = onClose) { Text("إغلاق") }
             }
             AndroidView(
