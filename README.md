@@ -5,10 +5,12 @@
 
 ## تحميل التطبيقات الجاهزة
 
-| الجهاز | الملف | الرابط |
-|---|---|---|
-| ويندوز | `LAN-Share.exe` | [تحميل](https://github.com/iggdigd218-dev/LAN-Share/releases/download/windows-exe/LAN-Share.exe) |
-| أندرويد | `LAN-Share.apk` | [تحميل](https://github.com/iggdigd218-dev/LAN-Share/releases/download/v1.0.0/LAN-Share.apk) |
+| الجهاز | الملف | رابط مباشر (يعمل في اليمن بدون VPN) | رابط احتياطي |
+|---|---|---|---|
+| أندرويد | `LAN-Share.apk` | [⚡ تحميل مباشر (سيرفر سريع)](https://gh-proxy.com/https://github.com/iggdigd218-dev/LAN-Share/releases/download/v1.0.0/LAN-Share.apk) | [تحميل بديل](https://ghproxy.net/https://github.com/iggdigd218-dev/LAN-Share/releases/download/v1.0.0/LAN-Share.apk) |
+| ويندوز | `LAN-Share.exe` | [⚡ تحميل مباشر (سيرفر سريع)](https://gh-proxy.com/https://github.com/iggdigd218-dev/LAN-Share/releases/download/v1.0.0/LAN-Share.exe) | [تحميل بديل](https://ghproxy.net/https://github.com/iggdigd218-dev/LAN-Share/releases/download/v1.0.0/LAN-Share.exe) |
+
+> **ملاحظة**: خوادم GitHub الأصلية محجوبة في اليمن (`release-assets.githubusercontent.com`). الروابط المباشرة أعلاه تعمل مباشرة عبر شبكة CDN السريعة بدون أي حجب.
 
 الإصدارات: [Releases](https://github.com/iggdigd218-dev/LAN-Share/releases)
 
